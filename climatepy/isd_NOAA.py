@@ -43,7 +43,6 @@ import pandas as pd
 import numpy as np
 
 
-
 def RHfromDEW_Wanielista(Tair, Tdew):
     '''
     Formula to copute Relative humidity from air temperature and dew temperature.
