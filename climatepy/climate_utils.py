@@ -8,6 +8,42 @@ import xarray as xr
 import pandas as pd
 from pyproj import Transformer
 
+def resample_climate(ds, freq='1D', var_mean=['t', 'u', 'v', 'p', 'SW', 'LW'], var_sum=['tp', 'precip_lapse_rate']):
+    '''
+    Function to resmaple climate variable.
+    Args:
+        ds: dataset to be resampled
+        freq: frequency at which to resample dataset
+        var_mean: variable for which resampling is done by averaging, e.g. temperature
+        var_sum: variable for which resampling is cumulative, e.g. precip
+
+    Returns:
+        dataset at resampled freq
+
+    '''
+    res = None
+    if var_mean is not None:
+        res = ds[var_mean].resample(time=freq).mean()
+    if var_sum is not None:
+        if res is not None:
+            res = xr.merge([res, ds[var_sum].resample(time=freq).sum()])
+        else:
+            res = ds[var_sum].resample(time=freq).sum()
+
+    print(f'Dataset resampled to {freq} frequency')
+    return res
+
+
+def read_fsm(file_pattern):
+    '''
+    Function to load FSM files into a dataset
+    Args:
+        file_pattern:
+
+    Returns:
+
+    '''
+
 def read_pt_fsm(fname):
     '''
     Function to read FSM outputs with pandas.

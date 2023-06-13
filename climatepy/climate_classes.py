@@ -5,6 +5,7 @@ Python Class to work with observation and downscaled timeseries
 '''
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.colors import LightSource
 from matplotlib import colors
 import numpy as np
 import climatepy.climate_utils as cu
@@ -15,85 +16,102 @@ import os
 
 import xarray as xr
 from xarrayMannKendall import xarrayMannKendall as xm
-
+from TopoPyScale import topo_sim as ts
 
 class clustered():
-    def __int__(self,
+    def __init__(self,
                 fname_pattern,
-                ds_param_file):
+                ds_param_file,
+                 water_month_start=9,
+                 var_mean=['t', 'u', 'v', 'p', 'SW', 'LW'],
+                 var_sum= ['tp', 'precip_lapse_rate']):
+
         self.fname_pattern=fname_pattern
+        self.water_month_start = water_month_start
+        self.var_mean = var_mean
+        self.var_sum = var_sum
 
         # open and load dataset
         self.ds_param = xr.open_dataset(ds_param_file)
         self.ds = xr.open_mfdataset(self.fname_pattern, concat_dim='point_id', combine='nested', parallel=False)
+
+        self.daily = cu.resample_climate(self.ds, freq='1D', var_mean=var_mean, var_sum=var_sum)
+        cu.compute_reference_periods(self.daily, water_month_start=self.water_month_start)
+
         print('---> Data loaded')
+    
+    def compute_FDD(self):
+        #algo to compute FDD
+        return
 
-
-    def resample(self, freq='1D', var_mean=['t', 'u', 'v', 'p', 'SW', 'LW'], var_sum=['tp', 'precip_lapse_rate']):
-        res = self.ds[var_mean].resample(time=freq).mean()
-        res[var_sum] = self.ds[var_sum].resample(time=freq).sum()
-        print(f'Dataset resampled to {} frequency')
-        return res
-
-    def seasonal(self, var='t', hydrological_year=True, agg='mean'):
-        if hydrological_year is False:
-            year_ref = 'year'
-        else:
-            year_ref = 'water_year'
-        daily = self.resample()
-        cu.compute_reference_periods(daily)
-
-        tmp = daily.where(daily.season=='DJF')[var]
-        if agg == 'mean':
-            self.DJF = tmp.groupby(tmp[year_ref]).mean(dim='time')
-        elif agg == 'sum':
-            self.DJF = tmp.groupby(tmp[year_ref]).sum(dim='time')
-            tmp = None
-
-        tmp = daily.where(daily.season=='MAM')[var]
-        if agg == 'mean':
-            self.MAM = tmp.groupby(tmp[year_ref]).mean(dim='time')
-        elif agg == 'sum':
-            self.MAM = tmp.groupby(tmp[year_ref]).sum(dim='time')
-            tmp = None
-
-        tmp = daily.where(daily.season=='JJA')[var]
-        if agg == 'mean':
-            self.JJA = tmp.groupby(tmp[year_ref]).mean(dim='time')
-        elif agg == 'sum':
-            self.JJA = tmp.groupby(tmp[year_ref]).sum(dim='time')
-            tmp = None
-
-        tmp = daily.where(daily.season=='SON')[var]
-        if agg == 'mean':
-            self.SON = tmp.groupby(tmp[year_ref]).mean(dim='time')
-        elif agg == 'sum':
-            self.SON = tmp.groupby(tmp[year_ref]).sum(dim='time')
-            tmp = None
-        else:
-            print('ERROR: agg method not available. To be implemented')
-
-    def annual(self, var, hydrological_year=True, agg='mean'):
+    def seasonal(self, var_mean=['t'], var_sum=None, hydrological_year=True,):
 
         if hydrological_year is False:
             year_ref = 'year'
         else:
             year_ref = 'water_year'
 
-        daily = self.resample()
-        cu.compute_reference_periods(daily)
+        self.DJF = None
+        self.MAM = None
+        self.JJA = None
+        self.SON = None
+
+        if var_mean is not None:
+            self.DJF = daily.where(daily.season=='DJF')[var_mean].groupby(daily[year_ref]).mean(dim='time')
+            self.MAM = daily.where(daily.season=='MAM')[var_mean].groupby(daily[year_ref]).mean(dim='time')
+            self.JJA = daily.where(daily.season=='JJA')[var_mean].groupby(daily[year_ref]).mean(dim='time')
+            self.SON = daily.where(daily.season=='SON')[var_mean].groupby(daily[year_ref]).mean(dim='time')
+
+        if var_sum is not None:
+            tmp = daily.where(daily.season=='DJF')[var_sum].groupby(daily[year_ref]).sum(dim='time')
+            if self.DJF is not None:
+                self.DJF = xr.merge([self.DJF, tmp])
+            tmp = daily.where(daily.season=='MAM')[var_sum].groupby(daily[year_ref]).sum(dim='time')
+            if self.MAM is not None:
+                self.MAM = xr.merge([self.MAM, tmp])
+            tmp = daily.where(daily.season=='JJA')[var_sum].groupby(daily[year_ref]).sum(dim='time')
+            if self.JJA is not None:
+                self.JJA = xr.merge([self.JJA, tmp])
+            tmp = daily.where(daily.season=='SON')[var_sum].groupby(daily[year_ref]).sum(dim='time')
+            if self.SON is not None:
+                self.SON = xr.merge([self.SON, tmp])
+
+
+    def agg_annual(self, var=['t'], hydrological_year=True, agg='mean'):
+
+        if hydrological_year is False:
+            year_ref = 'year'
+        else:
+            year_ref = 'water_year'
+
         if agg == 'mean':
-            self.annual = daily[var].groupby(daily[year_ref]).mean(dim='time')
+            annual = self.daily[var].groupby(self.daily[year_ref]).mean(dim='time')
         elif agg == 'sum':
-            self.annual = daily[var].groupby(daily[year_ref]).sum(dim='time')
+            annual = self.daily[var].groupby(self.daily[year_ref]).sum(dim='time')
+        elif agg == 'min':
+            annual = self.daily[var].groupby(self.daily[year_ref]).min(dim='time')
+        elif agg == 'max':
+            annual = self.daily[var].groupby(self.daily[year_ref]).max(dim='time')
         else:
             print('ERROR: agg method not available. To be implemented')
+        return annual
 
     def mann_kendall(self, da, rename_dict={'water_year':'time', 'longitude': 'x', 'latitude':'y'}, p_value=0.05):
         MK_class = xm.Mann_Kendall_test(da.rename(rename_dict), dim='time', alpha=p_value)
-        self.MK_trends = MK_class.compute().rename({v: k for k, v in rename_dict.items()})
+        invert_dict = {v: k for k, v in rename_dict.items()}
+        invert_dict.pop('time')
+        self.MK_trends = MK_class.compute().rename(invert_dict)
 
-    def map_stat(self,
+    def map_stat(self, ds, var=None):
+        if type(ds) is xr.DataArray:
+            ds = ds.to_dataset()
+
+        if len(list(ds.keys()))==1:
+            var = list(ds.keys())[0]
+
+        return ds[var].sel(point_id=self.ds_param.cluster_labels)
+
+    def plot_map_stat(self,
                  ds,
                  var=None,
                  ax=None,
@@ -104,7 +122,7 @@ class clustered():
         if ax is None:
             fig, ax = plt.subplots(1,1)
 
-        if type(ds_down) is xr.DataArray:
+        if type(ds) is xr.DataArray:
             ds = ds.to_dataset()
 
         alpha=1
