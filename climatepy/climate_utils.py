@@ -8,9 +8,13 @@ import xarray as xr
 import pandas as pd
 from pyproj import Transformer
 
-def resample_climate(ds, freq='1D', var_mean=['t', 'u', 'v', 'p', 'SW', 'LW'], var_sum=['tp', 'precip_lapse_rate']):
+def resample_climate(ds, freq='1D',
+                     var_mean=['t', 'u', 'v', 'p', 'SW', 'LW'],
+                     var_sum=['tp', 'precip_lapse_rate'],
+                     var_min=None,
+                     var_max=None):
     '''
-    Function to resmaple climate variable.
+    Function to resample climate variable.
     Args:
         ds: dataset to be resampled
         freq: frequency at which to resample dataset
@@ -21,14 +25,29 @@ def resample_climate(ds, freq='1D', var_mean=['t', 'u', 'v', 'p', 'SW', 'LW'], v
         dataset at resampled freq
 
     '''
-    res = None
+    res_mean = None
+    res_min = None
+    res_max = None
+    res_sum = None
+
     if var_mean is not None:
-        res = ds[var_mean].resample(time=freq).mean()
+        res_mean = ds[var_mean].resample(time=freq).mean()
+        res_mean = res_mean.rename(dict(zip(var_mean, [var+'_mean' for var in var_mean])))
     if var_sum is not None:
-        if res is not None:
-            res = xr.merge([res, ds[var_sum].resample(time=freq).sum()])
-        else:
-            res = ds[var_sum].resample(time=freq).sum()
+        res_sum = ds[var_sum].resample(time=freq).sum()
+        res_sum = res_sum.rename(dict(zip(var_sum, [var+'_sum' for var in var_sum])))
+    if var_min is not None:
+        res_min = ds[var_min].resample(time=freq).min()
+        res_min= res_min.rename(dict(zip(var_min, [var+'_min' for var in var_min])))
+    if var_max is not None:
+        res_max = ds[var_max].resample(time=freq).max()
+        res_max = res_max.rename(dict(zip(var_max, [var+'_max' for var in var_max])))
+
+    res_list = []
+    for r in [res_mean, res_sum, res_min, res_max]:
+        if r is not None:
+            res_list.append(r)
+    res = xr.merge(res_list)
 
     print(f'Dataset resampled to {freq} frequency')
     return res

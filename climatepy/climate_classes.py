@@ -39,7 +39,7 @@ class clustered():
         cu.compute_reference_periods(self.daily, water_month_start=self.water_month_start)
 
         print('---> Data loaded')
-    
+
     def compute_FDD(self):
         #algo to compute FDD
         return
