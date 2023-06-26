@@ -7,6 +7,7 @@ S. Filhol, March 2023
 import xarray as xr
 import pandas as pd
 from pyproj import Transformer
+import numpy as np
 
 def resample_climate(ds, freq='1D',
                      var_mean=['t', 'u', 'v', 'p', 'SW', 'LW'],
@@ -154,5 +155,104 @@ def open_dataset_climate(flist, concat_dim='point_id'):
         ds__list.append(xr.open_dataset(file))
     ds_ = xr.concat(ds__list, dim=concat_dim)
     return ds_
-    
 
+
+
+def fill_with_hard_limit(df_or_series,
+                         limit: int,
+                         fill_method='interpolate',
+                         **fill_method_kwargs):
+    """
+    The fill methods from Pandas such as ``interpolate`` or ``bfill``
+    will fill ``limit`` number of NaNs, even if the total number of
+    consecutive NaNs is larger than ``limit``. This function instead
+    does not fill any data when the number of consecutive NaNs
+    is > ``limit``.
+
+    Adapted from: https://stackoverflow.com/a/30538371/11052174
+
+    :param df_or_series: DataFrame or Series to perform interpolation on.
+    :param limit: Maximum number of consecutive NaNs to allow. Any occurrences of more consecutive NaNs than ``limit`` will have no
+        filling performed.
+    :param fill_method: Filling method to use, e.g. 'interpolate', 'bfill', etc.
+    :param fill_method_kwargs: Keyword arguments to pass to the fill_method, in addition to the given limit.
+
+    :returns: A filled version of the given df_or_series according
+        to the given inputs.
+
+    From: https://stackoverflow.com/a/66373000/1367097
+    """
+    # Keep things simple, ensure we have a DataFrame.
+    try:
+        df = df_or_series.to_frame()
+    except AttributeError:
+        df = df_or_series
+
+    mask = pd.DataFrame(True, index=df.index, columns=df.columns)      # Initialize our mask.
+    grp = (df.notnull() != df.shift().notnull()).cumsum()     # Get cumulative sums of consecutive NaNs.
+    grp['ones'] = 1    # Add columns of ones.
+
+    # Loop through columns and update the mask.
+    for col in df.columns:
+        mask.loc[:, col] = (
+                (grp.groupby(col)['ones'].transform('count') <= limit)
+                | df[col].notnull()
+        )
+
+    # Now, interpolate and use the mask to create NaNs for the larger gaps.
+    method = getattr(df, fill_method)
+    out = method(limit=limit, **fill_method_kwargs)[mask]
+
+    # Be nice to the caller and return a Series if that's what they provided.
+    if isinstance(df_or_series, pd.Series):
+        # Return a Series.
+        return out.loc[:, out.columns[0]]
+    return out
+
+
+def find_periods(df, snow_var, ndays=4, with_snow=True, snd_thresh=0.1, save_to_file=None, water_month_start=9):
+    '''
+
+    Args:
+        ndays: Maximum number of days separating two periods
+        with_snow:      - True: find periods of contiguous snow cover of at least ndays
+                        - False: find periods of snow cover where the ground is snow free for a maximum period of ndays
+        snd_thresh (float): snow depth threshold above which snow is detected. Unit, same as input data
+        water_month_start:
+
+    Returns:
+
+    '''
+
+    de = df[snow_var].copy()
+
+    if with_snow:
+        de.loc[de>snd_thresh] = np.nan
+        de.loc[de<=snd_thresh] = 1
+        a = -1
+    else:
+        de.loc[de>snd_thresh] = 1
+        de.loc[de<=snd_thresh] = np.nan
+        a = 1
+
+    de = fill_with_hard_limit(df_or_series=de, limit=ndays, fill_method='interpolate')
+    de.loc[np.isnan(de)] = 0
+    de = a * de.diff()
+
+    df_periods = pd.DataFrame()
+    df_periods['start'] = de.loc[de==1].index
+    df_periods['end'] = de.loc[de==-1].index
+    df_periods['duration'] = (df_periods.end - df_periods.start)
+
+    df_periods.set_index(df_periods.start, inplace=True)
+    compute_reference_periods(df_periods, water_month_start=water_month_start)
+
+
+    med_list = []
+    for i, row in df_periods.iterrows():
+        med_list.append(df.loc[row.start.strftime('%Y-%m-%d'):row.end.strftime('%Y-%m-%d')].median())
+    df_periods['snd_median'] = med_list
+    if save_to_file is None:
+        return df_periods
+    else:
+        df_periods.to_pickle(save_to_file)

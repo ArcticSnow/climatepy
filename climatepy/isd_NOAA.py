@@ -74,7 +74,7 @@ def read_isd_csv(file, var=['tmp', 'wnd', 'precip', 'rh', 'sd', 'slp'], keep_col
     cols = df.columns
     # unpack airtemperature
     if 'tmp' in var and 'tmp' in cols.str.lower():
-        df[['tmp', 'tmp_q']]=df.TMP.str.split(',', 1, expand=True).astype(int)
+        df[['tmp', 'tmp_q']] = df.TMP.str.split(',', n=1, expand=True).astype(int)
         df.tmp.loc[df.tmp == 9999] = np.nan
         df.tmp = df.tmp/10
         
@@ -93,7 +93,7 @@ def read_isd_csv(file, var=['tmp', 'wnd', 'precip', 'rh', 'sd', 'slp'], keep_col
 
     # unpack DEW to RH
     if 'rh' in var and 'dew' in cols.str.lower() and 'tmp' in cols.str.lower():
-        df[['dew', 'dew_q']]=df.DEW.str.split(',', 1, expand=True).astype(int)
+        df[['dew', 'dew_q']]=df.DEW.str.split(',', n=1, expand=True).astype(int)
         df.dew.loc[df.dew == 9999] = np.nan
         df.dew = df.dew/10
         df['rh'] = RHfromDEW_Wanielista(df.tmp, df.dew)
@@ -102,7 +102,7 @@ def read_isd_csv(file, var=['tmp', 'wnd', 'precip', 'rh', 'sd', 'slp'], keep_col
 
     # unpack sea level pressure
     if 'slp' in var and 'slp' in cols.str.lower():
-        df[['slp', 'slp_q']]=df.SLP.str.split(',', 1, expand=True).astype(int)
+        df[['slp', 'slp_q']]=df.SLP.str.split(',', n=1, expand=True).astype(int)
         df.slp.loc[df.slp == 99999] = np.nan
         df.slp = df.slp/10
         keep_cols.extend(('slp', 'slp_q'))

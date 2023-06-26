@@ -7,9 +7,16 @@ S. Filhol, May 2023
 
 ## Installation
 
-```commandline
+```bash
 git clone https://github.com/ArcticSnow/climatepy.git
 
 # install in development mode
 pip install -e climatepy
 ```
+
+
+
+## TODO
+- write function to compute FDD and TDD
+- wirte function to compute snow free season (sd_thresh_free (e.g. 10cm), sd_thresh_snow_onset (e.g. 80cm)).
+- 

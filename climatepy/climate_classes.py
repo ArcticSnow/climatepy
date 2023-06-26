@@ -21,21 +21,32 @@ from TopoPyScale import topo_sim as ts
 class clustered():
     def __init__(self,
                 fname_pattern,
-                ds_param_file,
+                ds_param_file=None,
                  water_month_start=9,
-                 var_mean=['t', 'u', 'v', 'p', 'SW', 'LW'],
-                 var_sum= ['tp', 'precip_lapse_rate']):
+                 var_mean=None,
+                 var_sum= None,
+                 var_min=None,
+                 var_max=None,
+                 parallel=False,
+                 daily_ds=False):
 
         self.fname_pattern=fname_pattern
         self.water_month_start = water_month_start
         self.var_mean = var_mean
         self.var_sum = var_sum
+        self.var_min = var_min
+        self.var_max = var_max
 
         # open and load dataset
-        self.ds_param = xr.open_dataset(ds_param_file)
-        self.ds = xr.open_mfdataset(self.fname_pattern, concat_dim='point_id', combine='nested', parallel=False)
+        if ds_param_file is not None:
+            self.ds_param = xr.open_dataset(ds_param_file)
 
-        self.daily = cu.resample_climate(self.ds, freq='1D', var_mean=var_mean, var_sum=var_sum)
+        if daily_ds:
+            self.daily = xr.open_mfdataset(self.fname_pattern, concat_dim='point_id', combine='nested', parallel=parallel)
+        else:
+            self.ds = xr.open_mfdataset(self.fname_pattern, concat_dim='point_id', combine='nested', parallel=parallel)
+            self.daily = cu.resample_climate(self.ds, freq='1D', var_mean=var_mean, var_sum=var_sum, var_min=var_min, var_max=var_max)
+
         cu.compute_reference_periods(self.daily, water_month_start=self.water_month_start)
 
         print('---> Data loaded')
@@ -44,63 +55,122 @@ class clustered():
         #algo to compute FDD
         return
 
-    def seasonal(self, var_mean=['t'], var_sum=None, hydrological_year=True,):
+    def compute_snow_period(self, snow_var, ndays=4, with_snow=True, snd_thresh=0.1, n_core=4):
+
+        from TopoPyScale import topo_utils as tu
+
+        df = fsm.DJF.to_dataframe()
+        df.reset_index(inplace=True)
+
+        df_list = []
+        fname = []
+        for pt in df.point_id.unique():
+            df_list.append(df.snd.loc[df.point_id==pt])
+            fname.append(f'')
+
+        n = len(df.point_id.unique())
+        fun_param = zip(df_list, [snow_var]*n, [with_snow]*n, [snd_thresh]*n)
+        tu.multicore_pooling(cu.find_periods, fun_param, n_core)
+
+
+
+
+
+    def agg_seasonal(self, var_mean=None, var_sum=None, var_min=None, var_max=None, hydrological_year=True,):
 
         if hydrological_year is False:
             year_ref = 'year'
         else:
             year_ref = 'water_year'
 
-        self.DJF = None
-        self.MAM = None
-        self.JJA = None
-        self.SON = None
+        if var_sum is None:
+            var_sum = self.var_sum
+        if var_mean is None:
+            var_mean = self.var_mean
+        if var_min is None:
+            var_min = self.var_min
+        if var_max is None:
+            var_max = self.var_max
+
+        DJF_list = []
+        MAM_list = []
+        JJA_list = []
+        SON_list = []
 
         if var_mean is not None:
-            self.DJF = daily.where(daily.season=='DJF')[var_mean].groupby(daily[year_ref]).mean(dim='time')
-            self.MAM = daily.where(daily.season=='MAM')[var_mean].groupby(daily[year_ref]).mean(dim='time')
-            self.JJA = daily.where(daily.season=='JJA')[var_mean].groupby(daily[year_ref]).mean(dim='time')
-            self.SON = daily.where(daily.season=='SON')[var_mean].groupby(daily[year_ref]).mean(dim='time')
+            DJF_list.append(self.daily.where(self.daily.season=='DJF')[var_mean].groupby(self.daily[year_ref]).mean(dim='time'))
+            MAM_list.append(self.daily.where(self.daily.season=='MAM')[var_mean].groupby(self.daily[year_ref]).mean(dim='time'))
+            JJA_list.append(self.daily.where(self.daily.season=='JJA')[var_mean].groupby(self.daily[year_ref]).mean(dim='time'))
+            SON_list.append(self.daily.where(self.daily.season=='SON')[var_mean].groupby(self.daily[year_ref]).mean(dim='time'))
 
         if var_sum is not None:
-            tmp = daily.where(daily.season=='DJF')[var_sum].groupby(daily[year_ref]).sum(dim='time')
-            if self.DJF is not None:
-                self.DJF = xr.merge([self.DJF, tmp])
-            tmp = daily.where(daily.season=='MAM')[var_sum].groupby(daily[year_ref]).sum(dim='time')
-            if self.MAM is not None:
-                self.MAM = xr.merge([self.MAM, tmp])
-            tmp = daily.where(daily.season=='JJA')[var_sum].groupby(daily[year_ref]).sum(dim='time')
-            if self.JJA is not None:
-                self.JJA = xr.merge([self.JJA, tmp])
-            tmp = daily.where(daily.season=='SON')[var_sum].groupby(daily[year_ref]).sum(dim='time')
-            if self.SON is not None:
-                self.SON = xr.merge([self.SON, tmp])
+            DJF_list.append(self.daily.where(self.daily.season=='DJF')[var_sum].groupby(self.daily[year_ref]).sum(dim='time'))
+            MAM_list.append(self.daily.where(self.daily.season=='MAM')[var_sum].groupby(self.daily[year_ref]).sum(dim='time'))
+            JJA_list.append(self.daily.where(self.daily.season=='JJA')[var_sum].groupby(self.daily[year_ref]).sum(dim='time'))
+            SON_list.append(self.daily.where(self.daily.season=='SON')[var_sum].groupby(self.daily[year_ref]).sum(dim='time'))
+
+        if var_min is not None:
+            DJF_list.append(self.daily.where(self.daily.season=='DJF')[var_min].groupby(self.daily[year_ref]).min(dim='time'))
+            MAM_list.append(self.daily.where(self.daily.season=='MAM')[var_min].groupby(self.daily[year_ref]).min(dim='time'))
+            JJA_list.append(self.daily.where(self.daily.season=='JJA')[var_min].groupby(self.daily[year_ref]).min(dim='time'))
+            SON_list.append(self.daily.where(self.daily.season=='SON')[var_min].groupby(self.daily[year_ref]).min(dim='time'))
+
+        if var_max is not None:
+            DJF_list.append(self.daily.where(self.daily.season=='DJF')[var_max].groupby(self.daily[year_ref]).max(dim='time'))
+            MAM_list.append(self.daily.where(self.daily.season=='MAM')[var_max].groupby(self.daily[year_ref]).max(dim='time'))
+            JJA_list.append(self.daily.where(self.daily.season=='JJA')[var_max].groupby(self.daily[year_ref]).max(dim='time'))
+            SON_list.append(self.daily.where(self.daily.season=='SON')[var_max].groupby(self.daily[year_ref]).max(dim='time'))
+
+        self.DJF = xr.merge(DJF_list)
+        self.MAM = xr.merge(MAM_list)
+        self.JJA = xr.merge(JJA_list)
+        self.SON = xr.merge(SON_list)
+
+        DJF_list = None
+        MAM_list = None
+        JJA_list = None
+        SON_list = None
+
+        print('---> Seasonal aggregation completed')
 
 
-    def agg_annual(self, var=['t'], hydrological_year=True, agg='mean'):
+    def agg_annual(self, var_mean=None, var_sum=None, var_min=None, var_max=None, hydrological_year=True, agg='mean'):
 
         if hydrological_year is False:
             year_ref = 'year'
         else:
             year_ref = 'water_year'
 
-        if agg == 'mean':
-            annual = self.daily[var].groupby(self.daily[year_ref]).mean(dim='time')
-        elif agg == 'sum':
-            annual = self.daily[var].groupby(self.daily[year_ref]).sum(dim='time')
-        elif agg == 'min':
-            annual = self.daily[var].groupby(self.daily[year_ref]).min(dim='time')
-        elif agg == 'max':
-            annual = self.daily[var].groupby(self.daily[year_ref]).max(dim='time')
-        else:
-            print('ERROR: agg method not available. To be implemented')
-        return annual
+        if var_sum is None:
+            var_sum = self.var_sum
+        if var_mean is None:
+            var_mean = self.var_mean
+        if var_min is None:
+            var_min = self.var_min
+        if var_max is None:
+            var_max = self.var_max
+
+        annual_list = []
+        if  var_mean is not None:
+            annual_list.append(self.daily[var_mean].groupby(self.daily[year_ref]).mean(dim='time'))
+        if  var_sum is not None:
+            annual_list.append(self.daily[var_sum].groupby(self.daily[year_ref]).sum(dim='time'))
+        if  var_min is not None:
+            annual_list.append(self.daily[var_min].groupby(self.daily[year_ref]).min(dim='time'))
+        if var_max is not None:
+            annual_list.append(self.daily[var_max].groupby(self.daily[year_ref]).max(dim='time'))
+
+        self.annual = xr.merge(annual_list)
+        annual_list = None
+        print('---> Annual aggregation completed')
+
 
     def mann_kendall(self, da, rename_dict={'water_year':'time', 'longitude': 'x', 'latitude':'y'}, p_value=0.05):
-        MK_class = xm.Mann_Kendall_test(da.rename(rename_dict), dim='time', alpha=p_value)
+        MK_class = xm.Mann_Kendall_test(da.rename(rename_dict), dim='time', alpha=p_value, method='theilslopes')
         invert_dict = {v: k for k, v in rename_dict.items()}
         invert_dict.pop('time')
-        self.MK_trends = MK_class.compute().rename(invert_dict)
+        MK_trends = xr.merge([da, MK_class.compute().rename(invert_dict)])
+        return MK_trends
 
     def map_stat(self, ds, var=None):
         if type(ds) is xr.DataArray:
@@ -139,9 +209,13 @@ class clustered():
 
         if len(list(ds.keys()))==1:
             var = list(ds.keys())[0]
-        ds[var].sel(point_id=self.ds_param.cluster_labels).plot.imshow(alpha=alpha, cmap=cmap, **kwargs)
+        im = ax.imshow(ds[var].sel(point_id=self.ds_param.cluster_labels),
+                  extent=[self.ds_param.x.min(), self.ds_param.x.max(), self.ds_param.y.min(), self.ds_param.y.max()],
+                  alpha=alpha,
+                  cmap=cmap,
+                  **kwargs)
 
-        return ax
+        return ax, im
 
 
 
@@ -401,7 +475,7 @@ class snow():
         if 'water_year' not in self.df.columns:
             cu.compute_reference_periods(self.df, water_month_start=self.water_month_start)
     
-    def plot_snow_depths(self, df=None, ylim=[0,400], axis=None):
+    def plot_snow_depths(self, df=None, ylim=[0,400], axis=None, c_median='r'):
         if axis is None:
             fig, ax = plt.subplots(1,1)
         else:
@@ -424,7 +498,7 @@ class snow():
             else:
                 ax.plot(df.loc[df.water_year==year].water_doy, df.loc[df.water_year==year][self.snow_var], alpha=0.2, c='k')
 
-        df.groupby(df.water_doy).median()[self.snow_var].plot(c='r', label=f'{year_list.min()}-{year_list.max()} Median snow depth', ax=ax)
+        df.groupby(df.water_doy).median()[self.snow_var].plot(c=c_median, label=f'{year_list.min()}-{year_list.max()} Median snow depth', ax=ax)
         ax.set_ylim(ylim)
         ax.legend()
         ax.set_xlabel('Days from September 1')
