@@ -18,6 +18,63 @@ import xarray as xr
 from xarrayMannKendall import xarrayMannKendall as xm
 from TopoPyScale import topo_sim as ts
 
+
+def plot_climate_stripe(T_anom, df=None, fname=None, dpi=150):
+    '''
+
+    Args:
+        df:
+        fname:
+
+    Returns:
+
+    This function follows the method from https://towardsdatascience.com/visualizing-climate-change-a-step-by-step-guide-to-reproduce-climate-stripes-with-python-ea1d440e8e8d
+
+    '''
+    stripe_cmap = colors.ListedColormap([
+    '#08306b', '#08519c', '#2171b5', '#4292c6',
+    '#6baed6', '#9ecae1', '#c6dbef', '#deebf7',
+    '#fee0d2', '#fcbba1', '#fc9272', '#fb6a4a',
+    '#ef3b2c', '#cb181d', '#a50f15', '#67000d'])
+
+    fig, ax = plt.subplots(figsize=(13.33,7.5), dpi = dpi)
+    norm = mpl.colors.Normalize(df[T_anom].min(), df[T_anom].max())
+    bar = ax.bar(df.index, 1, color=stripe_cmap(norm(df[T_anom])), width=1, zorder=2)
+
+    ## Remove all elements from plot
+    # Remove the spines
+    ax.spines[['top', 'left', 'bottom', 'right']].set_visible(False)
+
+    # Reformat x-axis label and tick labels
+    ax.set_xlabel('', fontsize=12, labelpad=10)
+    ax.set_xticks([])
+    ax.set_xlim([df.index.min()-1, df.index.max()+1])
+
+    # Reformat y-axis label and tick labels
+    ax.set_ylabel('', fontsize=12, labelpad=10)
+    ax.set_yticks([])
+    ax.set_ylim([0, 1])
+
+    # Set source text
+    ax.text(x=0.1, y=0.12, s="Source:  Downscaled ERA5 data with TopoPyScale", transform=fig.transFigure, ha='left', fontsize=10, alpha=.7)
+
+    # Adjust the margins around the plot area
+    plt.subplots_adjust(left=0.1, right=None, top=None, bottom=0.2, wspace=None, hspace=None)
+    # Reformat x-axis label and tick labels
+
+    ax.set_xlabel('', fontsize=12, labelpad=10)
+    ax.xaxis.set_tick_params(pad=2, labelbottom=True, bottom=True, labelsize=12, labelrotation=0, labelcolor='white')
+    ax.set_xlim([df['Time'].min()-1, df['Time'].max()+1])
+
+    # Set a white background
+    fig.patch.set_facecolor('black')
+    ax.patch.set_facecolor('black')
+
+    plt.savefig(fname, dpi=dpi)
+
+
+
+
 class clustered():
     def __init__(self,
                 fname_pattern,
