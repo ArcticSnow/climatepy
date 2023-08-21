@@ -69,25 +69,55 @@ def kmeans_cluster_maps(ds, n_clusters=100, var_clust='z_anomaly', lat_res=5, lo
 
     '''
     if lat_res is not None and lon_res is not None:
-        print(f'Resampling maps to new resolution (longitude={lon_res} ; latitude={lat_res})')
+        print(f'---> Resampling maps to new resolution (longitude={lon_res} ; latitude={lat_res})')
         dd_coarse = ds.coarsen(longitude=lon_res, latitude=lat_res, boundary='pad').mean()
     else:
         dd_coarse = ds
 
     # Reshape and Standardize maps
+    print('---> Standardize and reshape data')
     num_samples, height, width = dd_coarse[var_clust].shape
-    image_array = dd_coarse[var_clust].values.reshape(num_samples, height * width)
+    arr = dd_coarse[var_clust].values.reshape(num_samples, height * width)
     scaler = RobustScaler()
-    normalized_data = scaler.fit_transform(image_array)
+    normalized_data = scaler.fit_transform(arr)
 
     # Perform K-mean
+    print('---> Clustering')
     kmeans = MiniBatchKMeans(n_clusters=n_clusters, random_state=0)
     cluster_labels = kmeans.fit_predict(normalized_data)
 
+    print(f'---> Extract centroids')
     centroids = scaler.inverse_transform(kmeans.cluster_centers_).reshape(n_clusters, height, width)
     dd_coarse['centroids'] = (('cluster', 'latitude', 'longitude'), centroids)
 
     return kmeans, scaler, cluster_labels, dd_coarse
+
+def kmeans_predict(ds, model, scaler, var_clust='z_anomaly', lat_res=5, lon_res=5 ):
+    if lat_res is not None and lon_res is not None:
+        print(f'---> Resampling maps to new resolution (longitude={lon_res} ; latitude={lat_res})')
+        dd_coarse = ds.coarsen(longitude=lon_res, latitude=lat_res, boundary='pad').mean()
+    else:
+        dd_coarse = ds
+
+    # Reshape and Standardize maps
+    print('---> Standardize and reshape data')
+    num_samples, height, width = dd_coarse[var_clust].shape
+    arr = dd_coarse[var_clust].values.reshape(num_samples, height * width)
+    normalized_data = scaler.transform(arr)
+    arr = None
+
+    # Perform K-mean
+    print('---> Predict clustering')
+    cluster_labels = model.predict(normalized_data)
+    normalized_data = None
+
+    print(f'---> Extract centroids')
+    n_clusters = model.n_clusters
+    centroids = scaler.inverse_transform(kmeans.cluster_centers_).reshape(n_clusters, height, width)
+    dd_coarse['centroids'] = (('cluster', 'latitude', 'longitude'), centroids)
+
+    return cluster_labels, dd_coarse
+
 
 def search_number_of_clusters(ds, n_clusters= np.arange(10, 150, 10), var_clust='z_anomaly', lat_res=5, lon_res=5):
     feature_list = features.keys()
