@@ -16,15 +16,13 @@ recognition models such as used in this [notebook](https://www.kaggle.com/code/h
 
 
 '''
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, MaxPool2D, Dense
 
 import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
 import numpy as np
-import fetch_era5 as fe
-import geo_utils as gu
+from climatepy import fetch_era5 as fe
+from climatepy import geo_utils as gu
 
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.preprocessing import RobustScaler
@@ -69,7 +67,7 @@ def kmeans_cluster_maps(ds, n_cluster=100, var_clust='z_anomaly', lat_res=5, lon
 
     '''
     if lat_res is not None and lon_res is not None:
-        print(f'Resampling maps to new resolutino (longitude={lon_res} ; latitude={lat_res})')
+        print(f'Resampling maps to new resolution (longitude={lon_res} ; latitude={lat_res})')
         dd_coarse = ds.coarsen(longitude=lon_res, latitude=lat_res, boundary='pad').mean()
     else:
         dd_coarse = ds
@@ -89,6 +87,59 @@ def kmeans_cluster_maps(ds, n_cluster=100, var_clust='z_anomaly', lat_res=5, lon
 
     return kmeans, scaler, cluster_labels
 
+def search_number_of_clusters(ds, n_clusters= np.arange(10, 150, 10), var_clust='z_anomaly', lat_res=5, lon_res=5):
+    feature_list = features.keys()
+    wcss = []  # Define a list to hold the Within-Cluster-Sum-of-Squares (WCSS)
+    db_scores = []
+    ch_scores = []
+    rmse_elevation = []
+    n_pixels_median = []
+    n_pixels_min = []
+    n_pixels_max = []
+    n_pixels_mean = []
+
+    for n_clusters in cluster_range:
+        df_scaled, scaler = scale_df(df_param[feature_list], scaler=scaler_type, features=features)
+
+        if method == 'minibatchkmean':
+            df_centroids, kmeans_obj, df_param['cluster_labels'] = minibatch_kmeans_clustering(df_scaled,
+                                                                                               n_clusters,
+                                                                                               seed=2,
+                                                                                               features=features)
+        elif method == 'kmean':
+            df_centroids, kmeans_obj, df_param['cluster_labels'] = kmeans_clustering(df_scaled,
+                                                                                     n_clusters,
+                                                                                     seed=2,
+                                                                                     features=features)
+
+        labels = kmeans_obj.labels_
+        cluster_elev = inverse_scale_df(df_centroids[feature_list], scaler, features=features).elevation.loc[
+            df_param.cluster_labels].values
+        rmse = (((df_param.elevation - cluster_elev) ** 2).mean()) ** 0.5
+
+        # compute scores
+        wcss.append(kmeans_obj.inertia_)
+        db_scores.append(davies_bouldin_score(df_param, labels))
+        ch_scores.append(calinski_harabasz_score(df_param, labels))
+        rmse_elevation.append(rmse)
+
+        # compute stats on cluster sizes
+        pix_count = df_param.groupby('cluster_labels').count()['x']
+        n_pixels_min.append(pix_count.min())
+        n_pixels_max.append(pix_count.max())
+        n_pixels_mean.append(pix_count.mean())
+        n_pixels_median.append(pix_count.median())
+
+    df = pd.DataFrame({'n_clusters': cluster_range,
+                       'wcss_score': wcss,
+                       'db_score': db_scores,
+                       'ch_score': ch_scores,
+                       'rmse_elevation': rmse_elevation,
+                       'n_pixels_min': n_pixels_min,
+                       'n_pixels_median': n_pixels_median,
+                       'n_pixels_mean': n_pixels_mean,
+                       'n_pixels_max': n_pixels_max})
+
 
 def cnn_model():
     '''
@@ -97,6 +148,10 @@ def cnn_model():
     Returns:
         tensorflow CNN model object
     '''
+
+    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, MaxPool2D, Dense
+
 
     kernel_size = (3,3)
     model = Sequential()
