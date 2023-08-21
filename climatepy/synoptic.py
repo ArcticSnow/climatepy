@@ -87,7 +87,7 @@ def kmeans_cluster_maps(ds, n_clusters=100, var_clust='z_anomaly', lat_res=5, lo
     centroids = scaler.inverse_transform(kmeans.cluster_centers_).reshape(n_clusters, height, width)
     dd_coarse['centroids'] = (('cluster', 'latitude', 'longitude'), centroids)
 
-    return kmeans, scaler, cluster_labels
+    return kmeans, scaler, cluster_labels, dd_coarse
 
 def search_number_of_clusters(ds, n_clusters= np.arange(10, 150, 10), var_clust='z_anomaly', lat_res=5, lon_res=5):
     feature_list = features.keys()
