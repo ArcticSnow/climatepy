@@ -29,14 +29,29 @@ import cartopy
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.preprocessing import RobustScaler
 
-def convert_era5_to_daily(f_input, f_output, var=['z_anomaly', 'u', 'v']):
+def resample_era5_plev_to_daily(f_input, f_output, var=['z_anomaly', 'u', 'v'], savetofile=True):
+    '''
+    Function to aggregate ERA5 data to daily with
+.the function is not general, and
+    IN CONSTRUCTION
+
+    Args:
+        f_input (str):
+        f_output (str):
+        var (list str):
+        savetofile (bool):
+    Returns
+        Resample dataset
+    '''
 
     ds = xr.open_dataset(f_input)
     dd = ds.resample(time='D').mean(dim='time')
-    dd['z'] = dd.z / 9.80665
-    tmp = (dd.z - dd.z.mean(dim=('longitude', 'latitude')))
-    dd['z_anomaly'] = tmp - tmp.mean(dim='time')
-    te.to_netcdf(dd, f_output, var=var)
+    dd['z'] = dd.z / 9.80665                                    # convert geopotential to an alitude (we assume a constant gravity)
+    tmp = (dd.z - dd.z.mean(dim=('longitude', 'latitude')))     # subtract daily mean to reduce seasonality of atmospheric change
+    dd['z_anomaly'] = tmp - tmp.mean(dim='time')                # subtract the whole stack mean to remove North - South gradient
+    if savetofile:
+        te.to_netcdf(dd, f_output, var=var)
+    return dd
 
 
 def plot_synoptic(map, extent=[], projection=ccrs.PlateCarree(), plot_wind=True):
@@ -53,6 +68,7 @@ def plot_synoptic(map, extent=[], projection=ccrs.PlateCarree(), plot_wind=True)
     dd_coarse.sel(cluster=cluster).centroids.plot.contour(colors='k', levels=np.arange(-150, 150, 20), ax=p, linewidths=2, alpha=0.3)
     if plot_wind:
         dd_coarse.isel(time=step).plot.quiver(x='longitude', y='latitude', u='u', v='v', ax=p)
+
 
 
 def kmeans_cluster_maps(ds, n_clusters=100, var_clust='z_anomaly', lat_res=5, lon_res=5):
