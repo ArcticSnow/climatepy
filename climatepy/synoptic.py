@@ -55,7 +55,7 @@ def plot_synoptic(map, extent=[], projection=ccrs.PlateCarree(), plot_wind=True)
         dd_coarse.isel(time=step).plot.quiver(x='longitude', y='latitude', u='u', v='v', ax=p)
 
 
-def kmeans_cluster_maps(ds, n_cluster=100, var_clust='z_anomaly', lat_res=5, lon_res=5):
+def kmeans_cluster_maps(ds, n_clusters=100, var_clust='z_anomaly', lat_res=5, lon_res=5):
     '''
     Function to cluster a stack of maps (n * 2D Arrays) using kmeans
     Args:
@@ -81,7 +81,7 @@ def kmeans_cluster_maps(ds, n_cluster=100, var_clust='z_anomaly', lat_res=5, lon
     normalized_data = scaler.fit_transform(image_array)
 
     # Perform K-mean
-    kmeans = MiniBatchKMeans(n_clusters=n_cluster, random_state=0)
+    kmeans = MiniBatchKMeans(n_clusters=n_clusters, random_state=0)
     cluster_labels = kmeans.fit_predict(normalized_data)
 
     centroids = scaler.inverse_transform(kmeans.cluster_centers_).reshape(num_clusters, height, width)
