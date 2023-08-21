@@ -84,7 +84,7 @@ def kmeans_cluster_maps(ds, n_clusters=100, var_clust='z_anomaly', lat_res=5, lo
     kmeans = MiniBatchKMeans(n_clusters=n_clusters, random_state=0)
     cluster_labels = kmeans.fit_predict(normalized_data)
 
-    centroids = scaler.inverse_transform(kmeans.cluster_centers_).reshape(num_clusters, height, width)
+    centroids = scaler.inverse_transform(kmeans.cluster_centers_).reshape(n_clusters, height, width)
     dd_coarse['centroids'] = (('cluster', 'latitude', 'longitude'), centroids)
 
     return kmeans, scaler, cluster_labels
