@@ -61,6 +61,7 @@ setup(
                         'netcdf4',
                         'h5netcdf',
                         'rasterio',
-                        'pyproj'],
+                        'pyproj',
+                      'tensorflow'],
     include_package_data=True
 )

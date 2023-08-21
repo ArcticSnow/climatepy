@@ -1,8 +1,24 @@
 '''
-Functions to computde synoptic indexes
+Functions to compute synoptic indices and patterns
+S. Filhol, August 2023
 
-- 2D Blocking index following the method in Nagavciuc et al.(2022) which is based on Tibaldi and Molteni (1990)
+**Indices:**
+- blocking
+    - 2D blocking index according to Nagaviuc et al.(2022)
+
+
+**Patterns:**
+- unsupervised
+    - [x] K-means clustering
+    - [ ] CNN feature extraction followed by K-mean clustering
+- supervised classification given a catalogue of synoptic patterns (TBI). Some interesting models are the image
+recognition models such as used in this [notebook](https://www.kaggle.com/code/hamzamanssor/weather-recognition-using-deep-learning-models) for classifying type of precipitation based on image.
+
+
 '''
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, MaxPool2D, Dense
+
 import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
@@ -74,11 +90,72 @@ def kmeans_cluster_maps(ds, n_cluster=100, var_clust='z_anomaly', lat_res=5, lon
     return kmeans, scaler, cluster_labels
 
 
+def cnn_model():
+    '''
+    Example of a CNN model for a stack of 2D arrays (ny,nx) shape. This model has not been tested thoroughly.
+
+    Returns:
+        tensorflow CNN model object
+    '''
+
+    kernel_size = (3,3)
+    model = Sequential()
+    model.add(Conv2D(input_shape=(ny,nx,1),filters=64,kernel_size=(3,3),padding="same", activation="relu"))
+    model.add(Conv2D(filters=64,kernel_size=kernel_size,padding="same", activation="relu"))
+    model.add(MaxPool2D(pool_size=(2,2),strides=(2,2)))
+    model.add(Conv2D(filters=128, kernel_size=kernel_size, padding="same", activation="relu"))
+    model.add(Conv2D(filters=128, kernel_size=kernel_size, padding="same", activation="relu"))
+    model.add(MaxPool2D(pool_size=(2,2),strides=(2,2)))
+    model.add(Conv2D(filters=256, kernel_size=(3,3), padding="same", activation="relu"))
+    model.add(Conv2D(filters=256, kernel_size=(3,3), padding="same", activation="relu"))
+    model.add(Conv2D(filters=256, kernel_size=(3,3), padding="same", activation="relu"))
+    model.add(MaxPool2D(pool_size=(2,2),strides=(2,2)))
+    model.add(Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu"))
+    model.add(Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu"))
+    model.add(Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu"))
+    model.add(MaxPool2D(pool_size=(2,2),strides=(2,2)))
+    model.add(Dense(32))
+    model.add(Flatten())
+    model.compile(optimizer='adam', loss='mse')
+
+    # print model summary to console
+    model.summary()
+    return model
+
+
+def cnn_kmeans_cluster_map(arr, model=None):
+    # IN CONSTRUCTION
+    # Convert dataset to numpy array (2D or 3D). Array is organize [var, time, lat, lon]
+
+    # Standardize data and reshape array for CNN model
+    scaler = RobustScaler()
+    if len(arr.shape) == 4:
+        arr_sc = scaler.fit_transform(arr.reshape(2,-1).T)
+        arr_tr = arr_sc.T.reshape((2, nt, ny, nx))
+        arr_tr = np.transpose(arr_tr, (1,2,3,0))
+    elif len(arr.shape) == 3:
+        arr_sc = scaler.fit_transform(arr.reshape(1,-1).T)
+        arr_tr = arr_sc.T.reshape((nt, ny, nx))
+    else:
+        print('ERROR: shape of input array not compatible. Must be [n_var, n_time, n_latitude, n_longitude] or [n_time, n_latitude, n_longitude]')
+        return
+
+    features = model.predict(arr_tr)
+
+    # Perform K-Means clustering
+    kmeans = MiniBatchKMeans(n_clusters=n_clusters, random_state=0)
+    cluster_labels = kmeans.fit_predict(features)
+
+    return cluster_labels, features, kmeans
+
+
+
+
 
 
 def blocking_index(era):
     '''
-    Function to compute the blocking index according to Nagavciuc et al.(2022) itself based on Tibaldi and Molteni (1990)
+    Function to compute the blocking index according to Nagaviuc et al.(2022) itself based on Tibaldi and Molteni (1990)
     https://www.cpc.ncep.noaa.gov/products/precip/CWlink/blocking/index/index.nh.shtml
     
     Args:
