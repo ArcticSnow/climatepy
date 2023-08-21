@@ -129,7 +129,7 @@ def kmeans_predict(ds, model, scaler, var_clust='z_anomaly', lat_res=5, lon_res=
 
     print(f'---> Extract centroids')
     n_clusters = model.n_clusters
-    centroids = scaler.inverse_transform(kmeans.cluster_centers_).reshape(n_clusters, height, width)
+    centroids = scaler.inverse_transform(model.cluster_centers_).reshape(n_clusters, height, width)
     dd_coarse['centroids'] = (('cluster', 'latitude', 'longitude'), centroids)
 
     return cluster_labels, dd_coarse
