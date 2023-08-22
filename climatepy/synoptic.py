@@ -127,12 +127,10 @@ def kmeans_predict(ds, model, scaler, var_clust='z_anomaly', lat_res=5, lon_res=
     cluster_labels = model.predict(normalized_data)
     normalized_data = None
 
-    print(f'---> Extract centroids')
-    n_clusters = model.n_clusters
-    centroids = scaler.inverse_transform(model.cluster_centers_).reshape(n_clusters, height, width)
-    dd_coarse['centroids'] = (('cluster', 'latitude', 'longitude'), centroids)
+    df = dd_coarse.time.to_dataframe()
+    df['cluster_labels'] = cluster_labels
 
-    return cluster_labels, dd_coarse
+    return df
 
 
 def search_number_of_clusters(ds, n_clusters= np.arange(10, 150, 10), var_clust='z_anomaly', lat_res=5, lon_res=5):

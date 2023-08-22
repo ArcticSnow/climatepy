@@ -94,6 +94,7 @@ with open(fname, 'rb') as file:
     cluster_labels = pickle.load(file)
 
 dd_coarse = xr.open_dataset('kmeans_ds_train.nc')
+
 #=====================================================================
 #   Plot clusters - Characteristics Synoptic Patterns from K-means
 #=====================================================================
@@ -134,3 +135,33 @@ for cluster_id in [0,1]:  #np.unique(cluster_labels):
 
     plt.tight_layout()
     plt.savefig(f'pattern_{str(cluster_id+1).zfill(2)}.png', dpi=150)
+
+
+
+#=====================================================================
+# Predict features on the entire timeseries of 500mb geopotential
+#=====================================================================
+
+# Load model from disk
+fname = 'kmeans_model.pckl'
+with open(fname, 'rb') as file:
+    kmeans = pickle.load(file)
+
+fname = 'kmeans_scaler.pckl'
+with open(fname, 'rb') as file:
+    scaler = pickle.load(file)
+
+# write code to predict clusters in 10 years chunck.
+for years in ['data/194*.daily.nc',
+    '195*.daily.nc',
+    '196*.daily.nc',
+    '197*.daily.nc',
+    '198*.daily.nc',
+    '199*.daily.nc',
+    '200*.daily.nc',
+    '210*.daily.nc',
+    '220*.daily.nc'
+              ]:
+    ds = xr.open_mfdataset(years)
+    df = kmeans_predict(ds, kmeans, scaler, var_clust='z_anomaly', lat_res=None, lon_res=None )
+    df.to_pickle(f'df_clusters_{years.split("*")[0]}0s.pckl')
