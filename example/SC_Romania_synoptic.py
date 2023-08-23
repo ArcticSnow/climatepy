@@ -5,6 +5,7 @@ import xarray as xr
 import matplotlib.pyplot as plt
 from climatepy import synoptic
 import pickle
+from climatepy import fetch_climate as fc
 
 #===============================================================================
 #     Fetch Data from ERA5
@@ -16,7 +17,7 @@ lat = 45.6
 n_clusters = 30
 
 # fetch ERA5 data for the 500mb atmospheric layer
-fe.retrieve_era5('reanalysis',
+fc.fetch_era5('reanalysis',
                  '1950-09-01',
                  '2023-08-30', './data/hourly/',
                  lat+30,
@@ -152,16 +153,24 @@ with open(fname, 'rb') as file:
     scaler = pickle.load(file)
 
 # write code to predict clusters in 10 years chunck.
-for years in ['data/194*.daily.nc',
-    '195*.daily.nc',
-    '196*.daily.nc',
-    '197*.daily.nc',
-    '198*.daily.nc',
-    '199*.daily.nc',
-    '200*.daily.nc',
-    '210*.daily.nc',
-    '220*.daily.nc'
+for years in ['194*daily.nc',
+    '195*daily.nc',
+    '196*daily.nc',
+    '197*daily.nc',
+    '198*daily.nc',
+    '199*daily.nc',
+    '200*daily.nc',
+    '201*daily.nc',
+    '202*daily.nc'
               ]:
-    ds = xr.open_mfdataset(years)
-    df = kmeans_predict(ds, kmeans, scaler, var_clust='z_anomaly', lat_res=None, lon_res=None )
+    print(f'---> Applying K-means model to {years}')
+    ds = xr.open_mfdataset(f'data/PLEV_{years}')
+    df = synoptic.kmeans_predict(ds, kmeans, scaler, var_clust='z_anomaly', lat_res=None, lon_res=None )
     df.to_pickle(f'df_clusters_{years.split("*")[0]}0s.pckl')
+
+flist_df = glob.glob('df_clust*.pckl')
+
+fl = []
+for file in flist_df:
+    fl.append(pd.read_pickle(file))
+df = pd.concat(fl)

@@ -21,7 +21,7 @@ import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
 import numpy as np
-from climatepy import fetch_era5 as fe
+from climatepy import fetch_climate as fc
 from climatepy import geo_utils as gu
 import cartopy.crs as ccrs
 import cartopy

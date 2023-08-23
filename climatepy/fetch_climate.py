@@ -7,7 +7,7 @@ import subprocess
 from multiprocessing.dummy import Pool as ThreadPool
 from datetime import datetime, timedelta
 
-def retrieve_era5(product, startDate, endDate, eraDir, latN, latS, lonE, lonW, step, num_threads=10, surf_plev='surf',
+def fetch_era5(product, startDate, endDate, eraDir, latN, latS, lonE, lonW, step, num_threads=10, surf_plev='surf',
 				  plevels=None, realtime=False, varoi=None):
 	""" Sets up era5 surface retrieval.
 	* Creates list of year/month pairs to iterate through.
@@ -192,7 +192,7 @@ def era5_request_surf(dataset,
 		 'format': 'netcdf'
 		 },
 		target)
-	print(target + " complete")
+	print(f'--> {target} downloaded')
 
 
 
@@ -250,4 +250,49 @@ def era5_request_plev(dataset,
 			'grid': [0.25, 0.25],
 		},
 		target)
-	print(target + " complete")
+	print(f'--> {target} downloaded')
+
+
+def fetch_E_Obs(target='e_obs.zip',
+				product='ensemble_mean',
+				varoi=['mean_temperature', 'precipitation_amount', 'relative_humidity','surface_shortwave_downwelling_radiation'],
+				grid_res='0.1deg',
+				format='zip',
+				version='27.0e',
+				period='full_period'):
+	'''
+	Function to fetch E-Obs data from CDS webserver. E-Obs data are referenced under Cornes et al. (2018).
+	E-Obs are spatially interpolated in-situ observation data using statistical methods over the European continent. Gridding avaialbel at 0.1 and 0.25 degree.
+
+	Data and options to download available at: https://cds.climate.copernicus.eu/cdsapp#!/dataset/insitu-gridded-observations-europe?tab=form
+
+	Args:
+		target (str): filename of download zip or tar.gz file
+		product (str): 'ensemble_mean', 'ensemble_spread', 'elevation'. Elevation
+		varoi (list str): variable of interest to download
+		grid_res (str): grid resolution. '0.1deg' or '0.25deg' avaiable
+		format (str): file format to download data. 'zip' or 'tgz'
+		version (str): version of the dataset. latest (as of Aug 23, 2023: '27.0e')
+		period (str): period of interest. 'full_period' or specific periods '1950_1964','1965_1979','1980_1994','1995_2010','2011_2018','2012_2020'
+
+	'''
+	# handle potential incompatibilities in request parameters
+	if product == 'elevation':
+		varoi = 'land_surface_elevation'
+	if format == 'tg' and target.split('.')[-1] == 'zip':
+		target = target.split('.')[:-1] + '.tg'
+
+	c = cdsapi.Client()
+	c.retrieve(
+		'insitu-gridded-observations-europe',
+		{
+			'format': format,
+			'product_type': product,
+			'variable': varoi,
+			'grid_resolution': grid_res,
+			'version': version,
+			'period': period,
+		},
+		target)
+
+	print(f'--> {target} downloaded')
