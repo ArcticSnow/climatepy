@@ -292,9 +292,12 @@ def find_periods(df, snow_var, ndays=4, with_snow=True, snd_thresh=0.1, save_to_
 
 
     med_list = []
+    mean_list = []
     for i, row in df_periods.iterrows():
-        med_list.append(df.loc[row.start.strftime('%Y-%m-%d'):row.end.strftime('%Y-%m-%d')].median())
+        med_list.append(df.loc[row.start.strftime('%Y-%m-%d'):row.end.strftime('%Y-%m-%d')][snow_var].median())
+        mean_list.append(df.loc[row.start.strftime('%Y-%m-%d'):row.end.strftime('%Y-%m-%d')][snow_var].mean())
     df_periods['snd_median'] = med_list
+    df_periods['snd_mean'] = mean_list
     if save_to_file is None:
         return df_periods
     else:
