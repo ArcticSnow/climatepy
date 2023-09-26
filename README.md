@@ -23,4 +23,4 @@ pip install -e climatepy
 ## Long term ideas and Resources:
 integrate possibility to download forecast model (i.e. GFS):
 - NAM regional model (e.g. Alaska) by NOAA: https://www.nco.ncep.noaa.gov/pmb/products/nam/
-- GFS model (NOAA) see the Python lirbary: https://github.com/jagoosw/getgfs
+- GFS model (NOAA) see the Python library: https://github.com/jagoosw/getgfs

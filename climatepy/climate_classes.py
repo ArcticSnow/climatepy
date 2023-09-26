@@ -16,7 +16,7 @@ import os
 
 import xarray as xr
 from xarrayMannKendall import xarrayMannKendall as xm
-from TopoPyScale import topo_sim as ts
+from TopoPyScale import sim_fsm as sf
 
 
 def plot_climate_stripe(T_anom, df=None, fname=None, dpi=150):
