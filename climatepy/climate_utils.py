@@ -120,41 +120,72 @@ def read_pt_fsm(fname):
 
 
 
-def compute_reference_periods(obj, water_month_start=10):
+def compute_reference_periods(obj, ref_month_start=10):
+    """
+    Function to compute reference periods using a reference month. For instance a typical water year would start in September (9)
+
+    Args:
+        obj: Dataset or dataframe
+        ref_month_start:
+
+    Returns:
+
+    """
     if isinstance(obj, pd.DataFrame):
-        compute_reference_periods_df(obj, water_month_start)
+        compute_reference_periods_df(obj, ref_month_start)
         
     elif isinstance(obj, xr.Dataset):
-        compute_reference_periods_ds(obj, water_month_start)
+        compute_reference_periods_ds(obj, ref_month_start)
         
 
-def compute_reference_periods_df(df, water_month_start=10, time_column='time'):
-    ''' compute
-    - water year
-     - water month
+def compute_reference_periods_df(df, ref_month_start=10, time_column='time'):
+    """
+    Function to derive all reference periods used for climatic analysis in respect to whatever reference mont. Hydrological year ref_month_start=10 or 9
+
+    Args:
+        ds: xarray dataset. Must contain time coordinate
+        ref_month_start: reference month to start the referenc year. For instance an hydrological year starting in October, ref_month_start=10
+
+    Returns:
+     - ref year
+     - ref month
+     - ref_doy: reference day of year
      - seasons ['DJF', 'MAM', 'JJA', 'SON']
-     - day of water year
-     '''
-    df['water_year'] = df.index.year.where(df.index.month < water_month_start, df.index.year + 1)
-    df['water_start'] = df.water_year.apply(lambda x: pd.to_datetime(f'{x-1}-{water_month_start}-01', format='%Y-%m-%d'))
-    df['water_doy'] = (df.index - df.water_start).dt.days
+    """
+
+    df['ref_year'] = df.index.year.where(df.index.month < ref_month_start, df.index.year + 1)
+    df['ref_start'] = df.ref_year.apply(lambda x: pd.to_datetime(f'{x-1}-{ref_month_start}-01', format='%Y-%m-%d'))
+    df['ref_doy'] = (df.index - df.ref_start).dt.days +1
+    # Season does not work from index.
+    #df['season'] = df.index.season
     
     return df
 
-def compute_reference_periods_ds(ds, water_year_month_start = 10):
-    '''
-    Function to derive all reference periods used for climatic analysis relevant to the hydrological cycle
-     - water year
-     - water month
+def compute_reference_periods_ds(ds, ref_month_start = 10):
+    """
+    Function to derive all reference periods used for climatic analysis in respect to whatever reference mont. Hydrological year ref_month_start=10 or 9
+
+    Args:
+        ds: xarray dataset. Must contain time coordinate
+        ref_month_start: reference month to start the referenc year. For instance an hydrological year starting in October, ref_month_start=10
+
+    Returns:
+     - ref year
+     - ref month
      - seasons ['DJF', 'MAM', 'JJA', 'SON']
-    
-    ds - xarray dataset. Must contain time coordinate
-    water_year_month_start -  
-    '''
-    ds['water_year'] = ds.time.dt.year.where(ds.time.dt.month < water_year_month_start, ds.time.dt.year + 1)
+    """
+
+    ds['ref_year'] = ds.time.dt.year.where(ds.time.dt.month < ref_month_start, ds.time.dt.year + 1)
     ds['month'] = ds.time.dt.month
-    ds['water_month'] = (ds.month - water_year_month_start) % 12 + 1
+    ds['ref_month'] = (ds.month - ref_month_start) % 12 + 1
     ds['season'] = ds.time.dt.season
+
+    ds['tmp'] = (('time'),(ds.ref_year.values-1).astype(str))
+    ds['ref_start'] = (('time'), pd.to_datetime(ds.tmp.str.cat(f'-{ref_month_start}-1')))
+    ds['ref_doy'] = (ds.time - ds.ref_start).dt.days + 1
+    ds = ds.drop('tmp')
+
+
     # winter_d1 is defined as winter from [Oct to April]
     #ds['season_d1'] = xr.where((ds.month >= 10) |  (ds.month<=4), 'winter', 'summer')
 
