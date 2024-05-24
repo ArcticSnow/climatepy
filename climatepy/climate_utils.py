@@ -11,6 +11,7 @@ import numpy as np
 from multiprocessing import Pool
 from multiprocessing.dummy import Pool as ThreadPool
 import multiprocessing as mproc
+import pdb
 
 def multicore_pooling(fun, fun_param, n_cores):
     '''
@@ -118,9 +119,34 @@ def read_pt_fsm(fname):
     fsm.set_index('time', inplace=True)
     return fsm
 
+def compute_normal(df, varoi='Tair', normal_period=['1991-01-01','2020-12-31'], ref_month_start=1):
+    """
+    Function to compute monthly normal at daily resolution
 
+    Args:
+        df:
+        varoi:
+        normal_period:
+        ref_month_start:
 
-def compute_reference_periods(obj, ref_month_start=10):
+    Returns:
+
+    """
+    df = compute_reference_periods(df, ref_month_start=ref_month_start, year_offset=1)
+    df_norm = df[normal_period[0]:normal_period[1]].groupby(['ref_doy', 'ref_year']).mean()[varoi].unstack()
+
+    # Compute a monthly anomaly  with a daily resolution
+    # 1. average temperature per day for the reference period
+    arr = df_norm.mean(axis=1).values
+    # 2. Concatenate three time the yearly time series for then computing the a 31 days rolling mean
+    da =  pd.DataFrame()
+    da['norm'] = np.concatenate([arr,arr,arr])
+
+    normals = da.norm.rolling(31, center=True).mean()[366:366+366].reset_index().norm
+
+    return normals, df, df_norm
+
+def compute_reference_periods(obj, ref_month_start=10, year_offset=0):
     """
     Function to compute reference periods using a reference month. For instance a typical water year would start in September (9)
 
@@ -132,18 +158,18 @@ def compute_reference_periods(obj, ref_month_start=10):
 
     """
     if isinstance(obj, pd.DataFrame):
-        compute_reference_periods_df(obj, ref_month_start)
+        return compute_reference_periods_df(obj, ref_month_start, year_offset=year_offset)
         
     elif isinstance(obj, xr.Dataset):
-        compute_reference_periods_ds(obj, ref_month_start)
+        compute_reference_periods_ds(obj, ref_month_start, year_offset=year_offset)
         
 
-def compute_reference_periods_df(df, ref_month_start=10, time_column='time'):
+def compute_reference_periods_df(df, ref_month_start=10, year_offset=1):
     """
     Function to derive all reference periods used for climatic analysis in respect to whatever reference mont. Hydrological year ref_month_start=10 or 9
 
     Args:
-        ds: xarray dataset. Must contain time coordinate
+        df: xarray dataset. Must contain time coordinate
         ref_month_start: reference month to start the referenc year. For instance an hydrological year starting in October, ref_month_start=10
 
     Returns:
@@ -153,15 +179,17 @@ def compute_reference_periods_df(df, ref_month_start=10, time_column='time'):
      - seasons ['DJF', 'MAM', 'JJA', 'SON']
     """
 
-    df['ref_year'] = df.index.year.where(df.index.month < ref_month_start, df.index.year + 1)
-    df['ref_start'] = df.ref_year.apply(lambda x: pd.to_datetime(f'{x-1}-{ref_month_start}-01', format='%Y-%m-%d'))
-    df['ref_doy'] = (df.index - df.ref_start).dt.days +1
+    df['ref_year'] = df.index.year.where(df.index.month < ref_month_start, df.index.year + year_offset)
+    df['tmp'] = (df.ref_year.values - 1).astype(str)
+    df['ref_start'] = pd.to_datetime(df.assign(tmp2 = df.tmp + f'-{ref_month_start}-1').tmp2)
+    df['ref_doy'] = (df.index - df.ref_start).dt.days + 1
+    df = df.drop(columns=['tmp'])
     # Season does not work from index.
     #df['season'] = df.index.season
     
     return df
 
-def compute_reference_periods_ds(ds, ref_month_start = 10):
+def compute_reference_periods_ds(ds, ref_month_start = 10, year_offset=0):
     """
     Function to derive all reference periods used for climatic analysis in respect to whatever reference mont. Hydrological year ref_month_start=10 or 9
 
@@ -175,7 +203,7 @@ def compute_reference_periods_ds(ds, ref_month_start = 10):
      - seasons ['DJF', 'MAM', 'JJA', 'SON']
     """
 
-    ds['ref_year'] = ds.time.dt.year.where(ds.time.dt.month < ref_month_start, ds.time.dt.year + 1)
+    ds['ref_year'] = ds.time.dt.year.where(ds.time.dt.month < ref_month_start, ds.time.dt.year + year_offset)
     ds['month'] = ds.time.dt.month
     ds['ref_month'] = (ds.month - ref_month_start) % 12 + 1
     ds['season'] = ds.time.dt.season

@@ -38,7 +38,7 @@ def plot_climate_stripe(T_anom, df=None, fname=None, dpi=150):
     '#ef3b2c', '#cb181d', '#a50f15', '#67000d'])
 
     fig, ax = plt.subplots(figsize=(13.33,7.5), dpi = dpi)
-    norm = mpl.colors.Normalize(df[T_anom].min(), df[T_anom].max())
+    norm = colors.Normalize(df[T_anom].min(), df[T_anom].max())
     bar = ax.bar(df.index, 1, color=stripe_cmap(norm(df[T_anom])), width=1, zorder=2)
 
     ## Remove all elements from plot
