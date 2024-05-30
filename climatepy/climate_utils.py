@@ -119,21 +119,30 @@ def read_pt_fsm(fname):
     fsm.set_index('time', inplace=True)
     return fsm
 
-def compute_normal(df, varoi='Tair', normal_period=['1991-01-01','2020-12-31'], ref_month_start=1):
+def compute_normal(df, varoi='Tair', normal_period=['1991-01-01','2020-12-31'], ref_month_start=1, method='mean', groupby_var=['ref_doy', 'ref_year']):
     """
     Function to compute monthly normal at daily resolution
 
     Args:
-        df:
-        varoi:
-        normal_period:
-        ref_month_start:
+        df (dataframe): Dataframe with timeseires (index must be datetime)
+        varoi (str): Variable to compute normal
+        normal_period (str): list of start and end dates. Default ['1991-01-01','2020-12-31']
+        ref_month_start: Month to start the period on which to return normal timeseries. Default is January
+        method (str): daily aggregation method. Default='mean'
 
     Returns:
+        dataseries - daily normals
+        dataframe - dataframe with reference periods
+        dataframe - dataframe with daily aggregated values for the period of reference
 
     """
-    df = compute_reference_periods(df, ref_month_start=ref_month_start, year_offset=1)
-    df_norm = df[normal_period[0]:normal_period[1]].groupby(['ref_doy', 'ref_year']).mean()[varoi].unstack()
+
+
+    #pdb.set_trace()
+    if method=='mean':
+        df_norm = df[normal_period[0]:normal_period[1]][groupby_var + [varoi]].groupby(groupby_var).mean()[varoi].unstack()
+    elif method=='sum':
+        df_norm = df[normal_period[0]:normal_period[1]][groupby_var + [varoi]].groupby(groupby_var).sum()[varoi].unstack()
 
     # Compute a monthly anomaly  with a daily resolution
     # 1. average temperature per day for the reference period
@@ -144,7 +153,7 @@ def compute_normal(df, varoi='Tair', normal_period=['1991-01-01','2020-12-31'], 
 
     normals = da.norm.rolling(31, center=True).mean()[366:366+366].reset_index().norm
 
-    return normals, df, df_norm
+    return normals, df_norm
 
 def compute_reference_periods(obj, ref_month_start=10, year_offset=0):
     """
@@ -164,7 +173,7 @@ def compute_reference_periods(obj, ref_month_start=10, year_offset=0):
         compute_reference_periods_ds(obj, ref_month_start, year_offset=year_offset)
         
 
-def compute_reference_periods_df(df, ref_month_start=10, year_offset=1):
+def compute_reference_periods_df(df, ref_month_start=10, year_offset=0):
     """
     Function to derive all reference periods used for climatic analysis in respect to whatever reference mont. Hydrological year ref_month_start=10 or 9
 
@@ -173,23 +182,29 @@ def compute_reference_periods_df(df, ref_month_start=10, year_offset=1):
         ref_month_start: reference month to start the referenc year. For instance an hydrological year starting in October, ref_month_start=10
 
     Returns:
-     - ref year
-     - ref month
+     - ref_year: start year of the period of refetence
+     - period: explicit years covered by the period
+     - ref month_start: starting month of the reference year
      - ref_doy: reference day of year
      - seasons ['DJF', 'MAM', 'JJA', 'SON']
     """
-
-    df['ref_year'] = df.index.year.where(df.index.month < ref_month_start, df.index.year + year_offset)
-    df['tmp'] = (df.ref_year.values - 1).astype(str)
+    ref_year = df.index.year.where(df.index.month >= ref_month_start, df.index.year - 1)
+    df['ref_year'] = ref_year
+    if ref_month_start != 1:
+        df = df.assign(period= df.ref_year.astype(str) + '-' + (df.ref_year+1).astype(str))
+    else:
+        df['period'] = df.ref_year.astype(str)
+    df['tmp'] = df.ref_year.values.astype(str)
     df['ref_start'] = pd.to_datetime(df.assign(tmp2 = df.tmp + f'-{ref_month_start}-1').tmp2)
     df['ref_doy'] = (df.index - df.ref_start).dt.days + 1
+    #df['ref_moy'] = (df.index - df.ref_start).dt.month + 1
     df = df.drop(columns=['tmp'])
-    # Season does not work from index.
-    #df['season'] = df.index.season
+    df['season']=((df.index.month % 12 + 3) // 3).map({1:'DJF', 2: 'MAM', 3:'JJA', 4:'SON'})
+
     
     return df
 
-def compute_reference_periods_ds(ds, ref_month_start = 10, year_offset=0):
+def compute_reference_periods_ds(ds, ref_month_start = 10):
     """
     Function to derive all reference periods used for climatic analysis in respect to whatever reference mont. Hydrological year ref_month_start=10 or 9
 
@@ -203,7 +218,11 @@ def compute_reference_periods_ds(ds, ref_month_start = 10, year_offset=0):
      - seasons ['DJF', 'MAM', 'JJA', 'SON']
     """
 
-    ds['ref_year'] = ds.time.dt.year.where(ds.time.dt.month < ref_month_start, ds.time.dt.year + year_offset)
+    ds['ref_year'] = ds.time.dt.year.where(ds.time.dt.month >= ref_month_start, ds.time.dt.year)
+    if ref_month_start != 1:
+        ds = ds.assign(period= ds.ref_year.astype(str) + '-' + (ds.ref_year+1).astype(str))
+    else:
+        ds['period'] = ds.ref_year.astype(str)
     ds['month'] = ds.time.dt.month
     ds['ref_month'] = (ds.month - ref_month_start) % 12 + 1
     ds['season'] = ds.time.dt.season
