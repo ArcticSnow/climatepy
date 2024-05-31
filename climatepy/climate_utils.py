@@ -119,11 +119,16 @@ def read_pt_fsm(fname):
     fsm.set_index('time', inplace=True)
     return fsm
 
-def compute_normal(df, varoi='Tair', normal_period=['1991-01-01','2020-12-31'], ref_month_start=1, method='mean', groupby_var=['ref_doy', 'ref_year']):
+def compute_normal(df, varoi='Tair',
+                   normal_period=['1991-01-01','2020-12-31'],
+                   daily_agg='mean',
+                   quantiles=[0.1, 0.25, 0.75, 0.9],
+                   groupby_var=['ref_doy', 'ref_year']):
     """
     Function to compute monthly normal at daily resolution
 
     Args:
+        quantiles:
         df (dataframe): Dataframe with timeseires (index must be datetime)
         varoi (str): Variable to compute normal
         normal_period (str): list of start and end dates. Default ['1991-01-01','2020-12-31']
@@ -137,21 +142,28 @@ def compute_normal(df, varoi='Tair', normal_period=['1991-01-01','2020-12-31'], 
 
     """
 
-
-    #pdb.set_trace()
-    if method=='mean':
+    if daily_agg=='mean':
         df_norm = df[normal_period[0]:normal_period[1]][groupby_var + [varoi]].groupby(groupby_var).mean()[varoi].unstack()
-    elif method=='sum':
+    elif daily_agg=='sum':
         df_norm = df[normal_period[0]:normal_period[1]][groupby_var + [varoi]].groupby(groupby_var).sum()[varoi].unstack()
+    elif daily_agg=='max':
+        df_norm = df[normal_period[0]:normal_period[1]][groupby_var + [varoi]].groupby(groupby_var).max()[varoi].unstack()
+    elif daily_agg=='min':
+        df_norm = df[normal_period[0]:normal_period[1]][groupby_var + [varoi]].groupby(groupby_var).min()[varoi].unstack()
 
-    # Compute a monthly anomaly  with a daily resolution
-    # 1. average temperature per day for the reference period
-    arr = df_norm.mean(axis=1).values
-    # 2. Concatenate three time the yearly time series for then computing the a 31 days rolling mean
-    da =  pd.DataFrame()
-    da['norm'] = np.concatenate([arr,arr,arr])
+    def rolling_monthly_mean(arr):
+        da =  pd.DataFrame()
+        da['norm'] = np.concatenate([arr,arr,arr])
+        # 2. Concatenate three time the yearly time series for then computing the a 31 days rolling mean
+        return da.norm.rolling(31, center=True).mean()[366:366+366].reset_index().norm
 
-    normals = da.norm.rolling(31, center=True).mean()[366:366+366].reset_index().norm
+    # Compute a monthly anomaly statistics  with a daily resolution
+    normals=pd.DataFrame()
+    normals['mean'] = rolling_monthly_mean(df_norm.mean(axis=1).values)
+    normals['min'] = rolling_monthly_mean(df_norm.min(axis=1).values)
+    normals['max'] = rolling_monthly_mean(df_norm.max(axis=1).values)
+    for q in quantiles:
+        normals[f'q{int(q*100)}'] = rolling_monthly_mean(df_norm.quantile(q, axis=1).values)
 
     return normals, df_norm
 
