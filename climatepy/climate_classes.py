@@ -79,7 +79,7 @@ class clustered():
     def __init__(self,
                 fname_pattern,
                 ds_param_file=None,
-                 water_month_start=9,
+                 ref_month_start=9,
                  var_mean=None,
                  var_sum= None,
                  var_min=None,
@@ -88,7 +88,7 @@ class clustered():
                  daily_ds=False):
 
         self.fname_pattern=fname_pattern
-        self.water_month_start = water_month_start
+        self.ref_month_start = ref_month_start
         self.var_mean = var_mean
         self.var_sum = var_sum
         self.var_min = var_min
@@ -104,7 +104,7 @@ class clustered():
             self.ds = xr.open_mfdataset(self.fname_pattern, concat_dim='point_id', combine='nested', parallel=parallel)
             self.daily = cu.resample_climate(self.ds, freq='1D', var_mean=var_mean, var_sum=var_sum, var_min=var_min, var_max=var_max)
 
-        cu.compute_reference_periods(self.daily, water_month_start=self.water_month_start)
+        cu.compute_reference_periods(self.daily, ref_month_start=self.ref_month_start)
 
         print('---> Data loaded')
 
@@ -138,7 +138,7 @@ class clustered():
         if hydrological_year is False:
             year_ref = 'year'
         else:
-            year_ref = 'water_year'
+            year_ref = 'ref_year'
 
         if var_sum is None:
             var_sum = self.var_sum
@@ -196,7 +196,7 @@ class clustered():
         if hydrological_year is False:
             year_ref = 'year'
         else:
-            year_ref = 'water_year'
+            year_ref = 'ref_year'
 
         if var_sum is None:
             var_sum = self.var_sum
@@ -222,7 +222,7 @@ class clustered():
         print('---> Annual aggregation completed')
 
 
-    def mann_kendall(self, da, rename_dict={'water_year':'time', 'longitude': 'x', 'latitude':'y'}, p_value=0.05):
+    def mann_kendall(self, da, rename_dict={'ref_year':'time', 'longitude': 'x', 'latitude':'y'}, p_value=0.05):
         MK_class = xm.Mann_Kendall_test(da.rename(rename_dict), dim='time', alpha=p_value, method='theilslopes')
         invert_dict = {v: k for k, v in rename_dict.items()}
         invert_dict.pop('time')
@@ -288,12 +288,12 @@ class station():
                  point_id=0,
                 path_noaa=None,
                 file_met_office=None,
-                 water_month_start=9):
+                 ref_month_start=9):
         self.point_id = point_id
         self.path_toposcale_project = path_toposcale_project
         self.path_noaa = path_noaa
         self.file_met_office = file_met_office
-        self.water_month_start = water_month_start
+        self.ref_month_start = ref_month_start
 
         
         if not os.path.isdir(path_toposcale_project):
@@ -306,7 +306,7 @@ class station():
         self.obs = observation(path_noaa = self.path_noaa, 
                                stn_id=self.station_id, 
                                file_met_office=self.file_met_office,
-                               water_month_start = self.water_month_start,
+                               ref_month_start = self.ref_month_start,
                                )
         self.down = downscaled(self.path_toposcale_project, point_id)
         self.avail_dataset = {'obs': self.obs.dataset,
@@ -323,21 +323,21 @@ class station():
         print('---> Station metadata loaded')
         
         
-    def compute_reference_periods(self, water_month_start=None):
-        if water_month_start is not None:
-            self.water_month_start = water_month_start
+    def compute_reference_periods(self, ref_month_start=None):
+        if ref_month_start is not None:
+            self.ref_month_start = ref_month_start
         print('---> Computing reference periods ...')
         if hasattr(self.obs,'noaa'):
-            cu.compute_reference_periods(self.obs.noaa, water_month_start=self.water_month_start)
+            cu.compute_reference_periods(self.obs.noaa, ref_month_start=self.ref_month_start)
 
         if hasattr(self.obs,'met_office'):
-            cu.compute_reference_periods(self.obs.met_office, water_month_start=self.water_month_start)
+            cu.compute_reference_periods(self.obs.met_office, ref_month_start=self.ref_month_start)
         
         if hasattr(self.down,'toposcale'):
-            cu.compute_reference_periods(self.down.toposcale, water_month_start=self.water_month_start)
+            cu.compute_reference_periods(self.down.toposcale, ref_month_start=self.ref_month_start)
         
         if hasattr(self.down,'fsm'):
-            cu.compute_reference_periods(self.down.fsm, water_month_start=self.water_month_start)
+            cu.compute_reference_periods(self.down.fsm, ref_month_start=self.ref_month_start)
         print('Refence periods computed for all available datasets')
         
     def merge_datasets(self, d1, d2, **kwargs):
@@ -373,12 +373,12 @@ class downscaled():
 
 class observation():
     
-    def __init__(self, file_met_office=None, path_noaa=None, stn_id=None, water_month_start=None):
+    def __init__(self, file_met_office=None, path_noaa=None, stn_id=None, ref_month_start=None):
         import fnmatch
         
         self.file_met_office = file_met_office
         self.dataset = []
-        self.water_month_start = water_month_start
+        self.ref_month_start = ref_month_start
         
         if path_noaa is not None:
             for file in os.listdir(path_noaa):
@@ -404,7 +404,7 @@ class observation():
         to.set_index(to.date, inplace=True)
         to = to.drop(columns=['COD', 'DENST', 'Unnamed: 0', 'date', 'DAT'])
 
-        #cu.compute_reference_periods(to, water_month_start=self.water_month_start)
+        #cu.compute_reference_periods(to, ref_month_start=self.ref_month_start)
         to.SD = to.SD / 100  #convert cm to m
         self.met_office = to
 
@@ -415,17 +415,17 @@ class observation():
                                      keep_cols=noa.keep_cols_default,
                                      index_timestamp=True)
 class seasonal():
-    def __init__(self, df, var='t', name=None, water_month_start=9):
+    def __init__(self, df, var='t', name=None, ref_month_start=9):
         self.df = df
         self.var = var
         self.name = name
         self.window_days = None
         self.window_years = None
-        self.water_month_start = water_month_start
+        self.ref_month_start = ref_month_start
 
-        if 'water_year' not in self.df.columns:
-            cu.compute_reference_periods(df, water_month_start=self.water_month_start)
-        self.t_seasonal_raw = self.df.groupby(['water_year', 'water_doy'])[var].mean().unstack().T
+        if 'ref_year' not in self.df.columns:
+            cu.compute_reference_periods(df, ref_month_start=self.ref_month_start)
+        self.t_seasonal_raw = self.df.groupby(['ref_year', 'ref_doy'])[var].mean().unstack().T
 
     def compute_anomaly(self, window_days=5, window_years=10, reference_period=None):
         '''
@@ -444,10 +444,10 @@ class seasonal():
         self.window_years = window_years
 
         self.df[f'{self.var}_{self.window_days}D_mean'] = self.df[self.var][self.reference_period[0]: self.reference_period[1]].rolling(self.window_days).mean()
-        ref_var = self.df.groupby(['water_year', 'water_doy'])[f'{self.var}_{self.window_days}D_mean'].mean().unstack().T
+        ref_var = self.df.groupby(['ref_year', 'ref_doy'])[f'{self.var}_{self.window_days}D_mean'].mean().unstack().T
         yearly_mean = ref_var.mean(axis=1)
 
-        self.t_seasonal_smooth = self.df.groupby(['water_year', 'water_doy'])[f'{self.var}'].mean().unstack().T
+        self.t_seasonal_smooth = self.df.groupby(['ref_year', 'ref_doy'])[f'{self.var}'].mean().unstack().T
         self.t_seasonal_anomaly = self.t_seasonal_smooth.subtract(yearly_mean, axis=0)
         self.t_reference = ref_var
 
@@ -469,7 +469,7 @@ class seasonal():
         ((tu.iloc[31:]>=0).sum(axis=0)/tu.iloc[31:].count(axis=0)).rolling(7, center=True).mean().plot(ax=ax[1], label='2005-2023')
 
         ax[1].set_ylabel('$P_{T>0}$')
-        ax[1].set_xticks(ti.water_doy.values, labels=ti.index.strftime('%b'))
+        ax[1].set_xticks(ti.ref_doy.values, labels=ti.index.strftime('%b'))
         ax[0].legend(loc='lower right')
         ax[1].legend()
         ax[1].set_yticks([0,0.25, 0.5, 0.75, 1], ['0','25%','50%','75%', '100%'])
@@ -506,31 +506,31 @@ class seasonal():
         ti['date'] = pd.to_datetime(pd.date_range(self.df.index[0], self.df.index[-1] + pd.offsets.MonthBegin(),
                       freq='M', inclusive='both') + pd.Timedelta('1D'))
         ti.set_index(ti.date, inplace=True)
-        cu.compute_reference_periods(ti, water_month_start=self.water_month_start)
+        cu.compute_reference_periods(ti, ref_month_start=self.ref_month_start)
 
         im = ax.imshow(tu,
                    aspect='auto',cmap=cmap, interpolation='nearest', norm=cnorm,
                    extent=[self.df.index[0].year-0.5, self.df.index[-1].year+0.5, 366,0])
         plt.colorbar(im)
-        ax.set_yticks(ti.water_doy.values, labels=ti.index.strftime('%b'))
+        ax.set_yticks(ti.ref_doy.values, labels=ti.index.strftime('%b'))
 
 
 
 
 
 class snow():
-    def __init__(self, df, snow_var, name=None, water_month_start=9, reference_period=None):
+    def __init__(self, df, snow_var, name=None, ref_month_start=9, reference_period=None):
         self.df = df
         self.snow_var = snow_var
         self.name = name
-        self.water_month_start = water_month_start
+        self.ref_month_start = ref_month_start
         if reference_period is None:
             self.reference_period = [self.df.index[0], self.df.index[-1]]
         else:
             self.reference_period = reference_period
 
-        if 'water_year' not in self.df.columns:
-            cu.compute_reference_periods(self.df, water_month_start=self.water_month_start)
+        if 'ref_year' not in self.df.columns:
+            cu.compute_reference_periods(self.df, ref_month_start=self.ref_month_start)
     
     def plot_snow_depths(self, df=None, ylim=[0,400], axis=None, c_median='r'):
         if axis is None:
@@ -545,22 +545,22 @@ class snow():
         ti['date'] = pd.to_datetime(pd.date_range(self.df.index[0], self.df.index[-1] + pd.offsets.MonthBegin(),
                       freq='M', inclusive='both') + pd.Timedelta('1D'))
         ti.set_index(ti.date, inplace=True)
-        cu.compute_reference_periods(ti, water_month_start=self.water_month_start)
+        cu.compute_reference_periods(ti, ref_month_start=self.ref_month_start)
 
-        year_list = df.water_year.unique()
+        year_list = df.ref_year.unique()
         for i, year in enumerate(year_list):
             if i==0:
-                ax.plot(df.loc[df.water_year==year].water_doy, df.loc[df.water_year==year][self.snow_var], alpha=0.2, c='k',
+                ax.plot(df.loc[df.ref_year==year].ref_doy, df.loc[df.ref_year==year][self.snow_var], alpha=0.2, c='k',
                         label=f'{year_list.min()}-{year_list.max()} Snow depths')
             else:
-                ax.plot(df.loc[df.water_year==year].water_doy, df.loc[df.water_year==year][self.snow_var], alpha=0.2, c='k')
+                ax.plot(df.loc[df.ref_year==year].ref_doy, df.loc[df.ref_year==year][self.snow_var], alpha=0.2, c='k')
 
-        df.groupby(df.water_doy).median()[self.snow_var].plot(c=c_median, label=f'{year_list.min()}-{year_list.max()} Median snow depth', ax=ax)
+        df.groupby(df.ref_doy).median()[self.snow_var].plot(c=c_median, label=f'{year_list.min()}-{year_list.max()} Median snow depth', ax=ax)
         ax.set_ylim(ylim)
         ax.legend()
         ax.set_xlabel('Days from September 1')
         ax.set_ylabel('Snow depth [cm]')
-        ax.set_xticks(ti.water_doy.values, labels=ti.index.strftime('%b'))
+        ax.set_xticks(ti.ref_doy.values, labels=ti.index.strftime('%b'))
         
     def plot_year_vs_month(self, axis=None, cmap=plt.cm.viridis, **kwargs):
         if axis is None:
@@ -572,10 +572,10 @@ class snow():
         ti['date'] = pd.to_datetime(pd.date_range(self.df.index[0], self.df.index[-1] + pd.offsets.MonthBegin(),
                       freq='M', inclusive='both') + pd.Timedelta('1D'))
         ti.set_index(ti.date, inplace=True)
-        cu.compute_reference_periods(ti, water_month_start=self.water_month_start)
+        cu.compute_reference_periods(ti, ref_month_start=self.ref_month_start)
 
-        mon = self.df.groupby([self.df.water_doy, self.df.water_year]).mean()
-        year_list = self.df.water_year.unique()
+        mon = self.df.groupby([self.df.ref_doy, self.df.ref_year]).mean()
+        year_list = self.df.ref_year.unique()
         im = ax.imshow(mon[self.snow_var].unstack(),
                        aspect='auto',
                        cmap=cmap,
@@ -583,7 +583,7 @@ class snow():
                        extent=[self.df.index[0].year-0.5, self.df.index[-1].year+0.5, 366,0], **kwargs)
 
         plt.colorbar(im)
-        ax.set_yticks(ti.water_doy.values, labels=ti.index.strftime('%b'))
+        ax.set_yticks(ti.ref_doy.values, labels=ti.index.strftime('%b'))
         ax.set_xlabel('Hydrological year')
         ax.set_title(f'Daily Mean Snow Depth at {self.name}')
 
@@ -651,7 +651,7 @@ class snow():
             with_snow:      - True: find periods of contiguous snow cover of at least ndays
                             - False: find periods of snow cover where the ground is snow free for a maximum period of ndays
             snd_thresh (float): snow depth threshold above which snow is detected. Unit, same as input data
-            water_month_start:
+            ref_month_start:
 
         Returns:
 
@@ -678,7 +678,7 @@ class snow():
         df_periods['duration'] = (df_periods.end - df_periods.start)
 
         df_periods.set_index(df_periods.start, inplace=True)
-        cu.compute_reference_periods(df_periods, water_month_start=self.water_month_start)
+        cu.compute_reference_periods(df_periods, ref_month_start=self.ref_month_start)
 
 
         med_list = []

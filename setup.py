@@ -62,6 +62,7 @@ setup(
                         'h5netcdf',
                         'rasterio',
                         'pyproj',
-                      'tensorflow'],
+                      'tensorflow',
+                      'xarrayMannKendall'],
     include_package_data=True
 )

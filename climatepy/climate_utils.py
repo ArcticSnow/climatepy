@@ -119,6 +119,7 @@ def read_pt_fsm(fname):
     fsm.set_index('time', inplace=True)
     return fsm
 
+
 def compute_normal(df, varoi='Tair',
                    normal_period=['1991-01-01','2020-12-31'],
                    daily_agg='mean',
@@ -151,21 +152,22 @@ def compute_normal(df, varoi='Tair',
     elif daily_agg=='min':
         df_norm = df[normal_period[0]:normal_period[1]][groupby_var + [varoi]].groupby(groupby_var).min()[varoi].unstack()
 
-    def rolling_monthly_mean(arr):
+    def rolling_freq_mean(arr, freq=31):
         da =  pd.DataFrame()
         da['norm'] = np.concatenate([arr,arr,arr])
         # 2. Concatenate three time the yearly time series for then computing the a 31 days rolling mean
-        return da.norm.rolling(31, center=True).mean()[366:366+366].reset_index().norm
+        return da.norm.rolling(freq, center=True).mean()[366:366+366].reset_index().norm
 
     # Compute a monthly anomaly statistics  with a daily resolution
     normals=pd.DataFrame()
-    normals['mean'] = rolling_monthly_mean(df_norm.mean(axis=1).values)
-    normals['min'] = rolling_monthly_mean(df_norm.min(axis=1).values)
-    normals['max'] = rolling_monthly_mean(df_norm.max(axis=1).values)
+    normals['mean'] = rolling_freq_mean(df_norm.mean(axis=1).values, freq=31)
+    normals['min'] = rolling_freq_mean(df_norm.min(axis=1).values, freq=31)
+    normals['max'] = rolling_freq_mean(df_norm.max(axis=1).values, freq=31)
     for q in quantiles:
-        normals[f'q{int(q*100)}'] = rolling_monthly_mean(df_norm.quantile(q, axis=1).values)
+        normals[f'q{int(q*100)}'] = rolling_freq_mean(df_norm.quantile(q, axis=1).values, freq=31)
 
     return normals, df_norm
+
 
 def compute_reference_periods(obj, ref_month_start=10, year_offset=0):
     """
